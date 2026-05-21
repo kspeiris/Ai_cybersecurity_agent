@@ -1,20 +1,23 @@
-from openai import OpenAI
-from config import OPENAI_API_KEY, OPENAI_MODEL
+from google import genai
+from google.genai import types
+from config import GEMINI_API_KEY, GEMINI_MODEL
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 def _make_completion(prompt: str) -> str:
-    """Helper to call OpenAI and return text."""
-    if not OPENAI_API_KEY:
-        return "AI summarization unavailable (no API key)."
+    """Call Gemini and return generated text."""
+    if client is None:
+        return "AI summarization unavailable (no Gemini API key)."
     try:
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=1500,
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                max_output_tokens=1500,
+            ),
         )
-        return response.choices[0].message.content.strip()
+        return response.text.strip() if response.text else ""
     except Exception as e:
         return f"AI summarization error: {str(e)}"
 

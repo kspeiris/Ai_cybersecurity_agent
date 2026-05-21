@@ -1,17 +1,14 @@
 import chromadb
 from chromadb.utils import embedding_functions
-from config import CHROMA_PERSIST_DIR, OPENAI_API_KEY
+from config import CHROMA_PERSIST_DIR
 
-# Embedding function using OpenAI
-openai_ef = embedding_functions.OpenAIEmbeddingFunction(
-    api_key=OPENAI_API_KEY,
-    model_name="text-embedding-3-small"
-)
+# Local embedding function, so semantic search does not require an external LLM key.
+embedding_function = embedding_functions.DefaultEmbeddingFunction()
 
 client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
 collection = client.get_or_create_collection(
     name="cybersecurity_reports",
-    embedding_function=openai_ef
+    embedding_function=embedding_function
 )
 
 def store_report_embedding(report_id: int, content: str, metadata: dict = None):

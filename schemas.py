@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime
 
 class ResearchRequest(BaseModel):
     topic: str = "latest cybersecurity threats"
@@ -12,7 +13,7 @@ class ReportOut(BaseModel):
     topic: str
     summary: str
     report_path: str
-    created_at: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

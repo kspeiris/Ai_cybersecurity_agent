@@ -1,4 +1,5 @@
 import { BrainCircuit, CheckCircle2 } from 'lucide-react'
+import MarkdownContent from '@/components/MarkdownContent'
 
 interface AiSummaryProps {
   summary: string
@@ -12,7 +13,7 @@ export default function AiSummary({ summary, recommendations = [] }: AiSummaryPr
         <BrainCircuit className="h-5 w-5 text-accent" />
         AI Security Summary
       </h3>
-      <p className="text-sm leading-relaxed text-slate-300">{summary}</p>
+      <MarkdownContent content={summary} normalize />
       {recommendations.length > 0 && (
         <div className="mt-4 space-y-2">
           {recommendations.map((item) => (

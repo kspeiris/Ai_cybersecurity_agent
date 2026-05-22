@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import MarkdownContent from '@/components/MarkdownContent'
 import SearchBar from '@/components/SearchBar'
 
 export default function ResearchPage() {
@@ -18,9 +19,9 @@ export default function ResearchPage() {
       {searchResult && (
         <div className="soc-card p-5">
           <h2 className="mb-3 text-xl font-semibold">AI Answer</h2>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">
-            {searchResult.answer ?? JSON.stringify(searchResult, null, 2)}
-          </p>
+          <div className="rounded-lg border border-slate-800 bg-slate-950/50 px-5 py-4">
+            <MarkdownContent content={searchResult.answer ?? JSON.stringify(searchResult, null, 2)} normalize />
+          </div>
         </div>
       )}
     </div>

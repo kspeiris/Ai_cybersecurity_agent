@@ -36,8 +36,9 @@ export default function SearchBar({ onResults }: Props) {
         onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
       />
       <button
+        type="button"
         onClick={handleSearch}
-        disabled={loading}
+        disabled={loading || !query.trim()}
         className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 font-medium text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <Search className="h-4 w-4" />

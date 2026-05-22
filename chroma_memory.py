@@ -23,6 +23,17 @@ def store_report_embedding(report_id: int, content: str, metadata: dict = None):
         ids=[doc_id]
     )
 
+def delete_report_embedding(report_id: int):
+    """Delete a report vector if it exists."""
+    collection.delete(ids=[f"report_{report_id}"])
+
+def delete_all_report_embeddings():
+    """Delete all report vectors from the collection."""
+    results = collection.get()
+    ids = results.get("ids", [])
+    if ids:
+        collection.delete(ids=ids)
+
 def search_reports(query: str, n_results: int = 5) -> list:
     """Semantic search over stored reports."""
     results = collection.query(

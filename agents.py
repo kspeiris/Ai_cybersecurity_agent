@@ -6,6 +6,9 @@ from threat_classifier import classify_threat, severity_score
 from remediation import generate_remediation
 from modules.summarizer import summarize_cves, summarize_news, summarize_advisories
 from alerts import send_critical_alert
+import logging
+
+logger = logging.getLogger(__name__)
 
 class AgentState(TypedDict):
     topic: str
@@ -19,28 +22,37 @@ class AgentState(TypedDict):
     alerts_sent: bool
     final_report: str
 
+def _safe_collect(label: str, func, *args, **kwargs):
+    try:
+        return func(*args, **kwargs)
+    except Exception as exc:
+        logger.warning("%s collection failed: %s", label, exc)
+        return []
+
 def research_agent(state: AgentState) -> AgentState:
-    state["cve_data"] = fetch_cves(limit=5)
-    state["news_data"] = fetch_news(limit=5)
-    state["advisory_data"] = fetch_advisories(limit=5)
+    state["cve_data"] = _safe_collect("CVE", fetch_cves, limit=5)
+    state["news_data"] = _safe_collect("News", fetch_news, limit=5)
+    state["advisory_data"] = _safe_collect("GitHub advisory", fetch_advisories, limit=5)
     return state
 
 def analysis_agent(state: AgentState) -> AgentState:
     for cve in state["cve_data"]:
-        cve["threat_type"] = classify_threat(cve["description"])
-        cve["score"] = severity_score(cve["severity"])
-    # Critical alerts
+        cve["threat_type"] = classify_threat(cve.get("description", ""))
+        cve["score"] = severity_score(cve.get("severity", "UNKNOWN"))
     for cve in state["cve_data"]:
-        if cve["score"] >= 8:
-            send_critical_alert(cve["id"], cve["severity"], cve["description"])
+        if cve.get("score", 0) >= 8:
+            try:
+                send_critical_alert(cve.get("id", "N/A"), cve.get("severity", "UNKNOWN"), cve.get("description", ""))
+            except Exception as exc:
+                logger.warning("Critical alert failed for %s: %s", cve.get("id", "N/A"), exc)
     return state
 
 def remediation_agent(state: AgentState) -> AgentState:
     remediations = {}
     for cve in state["cve_data"]:
-        if cve["score"] >= 5:
-            remediations[cve["id"]] = generate_remediation(
-                cve["id"], cve["description"], cve["threat_type"]
+        if cve.get("score", 0) >= 5:
+            remediations[cve.get("id", "N/A")] = generate_remediation(
+                cve.get("id", "N/A"), cve.get("description", ""), cve.get("threat_type", "Unknown")
             )
     state["remediations"] = remediations
     return state

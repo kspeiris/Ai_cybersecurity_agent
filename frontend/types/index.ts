@@ -23,6 +23,11 @@ export interface Report {
   created_at: string
 }
 
+export interface ReportDetail extends Report {
+  filename: string
+  content: string
+}
+
 export interface DashboardReport {
   id: number
   topic: string

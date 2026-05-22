@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Activity, AlertTriangle, FileText, Shield } from 'lucide-react'
+import Link from 'next/link'
+import { Activity, AlertTriangle, ArrowUpRight, FileText, Shield } from 'lucide-react'
 import AiSummary from '@/components/AiSummary'
 import SeverityChart from '@/components/SeverityChart'
+import SourceChart from '@/components/SourceChart'
 import ThreatCard from '@/components/ThreatCard'
 import ThreatTable from '@/components/ThreatTable'
 import TimelineChart from '@/components/TimelineChart'
@@ -61,14 +63,27 @@ export default function Dashboard() {
     { name: 'Low', value: data.severity.Low },
   ]
 
+  const sourceData = (() => {
+    const counts: Record<string, number> = {}
+    data.feed.forEach(f => {
+      const srcName = f.source || 'Unknown'
+      counts[srcName] = (counts[srcName] || 0) + 1
+    })
+    const arr = Object.entries(counts).map(([name, value]) => ({ name: name.substring(0, 15), value }))
+    return arr.length ? arr : [{ name: 'NVD', value: 0 }, { name: 'GitHub', value: 0 }, { name: 'News', value: 0 }]
+  })()
+
   return (
     <div className="space-y-6 pt-28 md:pt-0">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm uppercase tracking-[0.25em] text-accent">SOC Command</p>
           <h1 className="mt-1 text-3xl font-bold">Security Dashboard</h1>
+          <p className="mt-2 max-w-2xl text-sm text-slate-400">
+            Live CVE intelligence, generated research, and AI triage signals in one analyst view.
+          </p>
         </div>
-        <p className="text-sm text-slate-500">
+        <p className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-400">
           {updatedAt ? `Updated ${updatedAt.toLocaleTimeString()}` : 'Connecting...'}
         </p>
       </div>
@@ -80,7 +95,7 @@ export default function Dashboard() {
         <ThreatCard title="AI Risk Score" value={data.summary.risk_score} color="text-accent" caption="Composite score" icon={<Activity className="h-5 w-5" />} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="soc-card p-5">
           <h2 className="mb-4 text-xl font-semibold">Severity Distribution</h2>
           <SeverityChart data={chartData} />
@@ -89,11 +104,27 @@ export default function Dashboard() {
           <h2 className="mb-4 text-xl font-semibold">Threat Timeline</h2>
           <TimelineChart data={data.timeline} />
         </div>
+        <div className="soc-card p-5">
+          <h2 className="mb-4 text-xl font-semibold">Source Feed</h2>
+          <SourceChart data={sourceData} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.4fr_0.9fr]">
         <div className="soc-card p-5">
-          <h2 className="mb-4 text-xl font-semibold">Latest Threat Feed</h2>
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Latest Threat Feed</h2>
+              <p className="mt-1 text-sm text-slate-400">{data.feed.length} correlated finding{data.feed.length === 1 ? '' : 's'}</p>
+            </div>
+            <Link
+              href="/threat-feed"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-accent transition hover:border-accent/70 hover:bg-slate-950/50"
+            >
+              View all
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </div>
           <ThreatTable cves={data.feed} />
         </div>
         <AiSummary summary={data.ai.summary} recommendations={data.ai.recommendations} />

@@ -9,13 +9,14 @@ from schemas import ResearchRequest, ResearchResponse, ReportOut
 from orchestrator import run_research
 from database import SessionLocal, init_db
 from models import ResearchReport
-from chroma_memory import search_reports
+from chroma_memory import delete_all_report_embeddings, delete_report_embedding, search_reports
 from rag import ask_with_context
 from threat_classifier import classify_threat, severity_score
 from github_scanner import scan_github_repo
 from owasp_mapper import map_to_owasp
 from scheduler import start_scheduler
 from config import REPORT_DIR, SCHEDULER_HOUR
+from report_utils import build_report_summary
 
 # Initialise database tables on startup
 init_db()
@@ -51,9 +52,116 @@ def list_reports():
         reports = db.query(ResearchReport).order_by(
             ResearchReport.created_at.desc()
         ).limit(20).all()
-        return reports
+        return [
+            {
+                "id": report.id,
+                "topic": report.topic,
+                "summary": build_report_summary(report.summary, limit=700),
+                "report_path": report.report_path,
+                "created_at": report.created_at,
+            }
+            for report in reports
+        ]
     finally:
         db.close()
+
+def _safe_report_path(stored_path: str) -> Path:
+    report_dir = Path(REPORT_DIR).resolve()
+    candidate = Path(stored_path or "")
+    if not candidate.is_absolute():
+        candidate = (Path.cwd() / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+
+    if report_dir not in candidate.parents and candidate != report_dir:
+        candidate = (report_dir / Path(stored_path or "").name).resolve()
+    return candidate
+
+@app.get("/reports/{report_id}")
+def get_report(report_id: int):
+    """Return one report with full Markdown content for in-app viewing."""
+    db = SessionLocal()
+    try:
+        report = db.query(ResearchReport).filter(ResearchReport.id == report_id).first()
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+
+        report_path = _safe_report_path(report.report_path)
+        content = ""
+        if report_path.is_file():
+            content = report_path.read_text(encoding="utf-8")
+
+        return {
+            "id": report.id,
+            "topic": report.topic,
+            "summary": build_report_summary(report.summary, limit=700),
+            "report_path": report.report_path,
+            "filename": report_path.name,
+            "created_at": report.created_at,
+            "content": content,
+        }
+    finally:
+        db.close()
+
+@app.delete("/reports/{report_id}")
+def delete_report(report_id: int):
+    """Delete one report from SQLite, disk, and ChromaDB memory."""
+    db = SessionLocal()
+    try:
+        report = db.query(ResearchReport).filter(ResearchReport.id == report_id).first()
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+
+        report_path = _safe_report_path(report.report_path)
+        file_deleted = False
+        if report_path.is_file():
+            report_path.unlink()
+            file_deleted = True
+
+        db.delete(report)
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        db.close()
+
+    try:
+        delete_report_embedding(report_id)
+    except Exception:
+        pass
+
+    return {"deleted": True, "report_id": report_id, "file_deleted": file_deleted}
+
+@app.delete("/reports")
+def delete_all_reports():
+    """Delete all generated reports from SQLite, disk, and ChromaDB memory."""
+    db = SessionLocal()
+    deleted_files = 0
+    try:
+        reports = db.query(ResearchReport).all()
+        report_count = len(reports)
+        for report in reports:
+            report_path = _safe_report_path(report.report_path)
+            if report_path.is_file():
+                report_path.unlink()
+                deleted_files += 1
+            db.delete(report)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        db.close()
+
+    try:
+        delete_all_report_embeddings()
+    except Exception:
+        pass
+
+    return {"deleted": True, "reports_deleted": report_count, "files_deleted": deleted_files}
 
 @app.get("/report-file/{filename}")
 def get_report_file(filename: str):
@@ -124,16 +232,17 @@ def dashboard_data():
         timeline = []
 
         for index, report in enumerate(reports[:8]):
-            summary = report.summary or "AI-generated security research report"
+            summary = build_report_summary(report.summary or "AI-generated security research report", limit=300)
             severity = _infer_severity(summary, index)
             severity_counts[severity] += 1
             created_at = _format_datetime(report.created_at)
             feed.append({
                 "id": f"RPT-{report.id:04d}",
                 "severity": severity,
-                "description": summary[:150],
+                "description": summary,
                 "source": report.topic,
                 "date": created_at,
+                "report_path": report.report_path,
             })
 
         today = datetime.utcnow().date()
@@ -143,7 +252,7 @@ def dashboard_data():
             timeline.append({"day": day.strftime("%b %d"), "detections": detections})
 
         latest_report = reports[0] if reports else None
-        ai_summary = latest_report.summary if latest_report else (
+        ai_summary = build_report_summary(latest_report.summary, limit=700) if latest_report else (
             "No stored reports yet. Run a research task to populate live AI intelligence. "
             "The dashboard is ready to display CVEs, report summaries, recommendations, "
             "and RAG search results as soon as data arrives."
@@ -172,7 +281,7 @@ def dashboard_data():
                 {
                     "id": report.id,
                     "topic": report.topic,
-                    "summary": report.summary,
+                    "summary": build_report_summary(report.summary, limit=700),
                     "path": report.report_path,
                     "created_at": _format_datetime(report.created_at),
                 }

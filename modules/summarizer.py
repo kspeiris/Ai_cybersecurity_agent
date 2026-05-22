@@ -1,22 +1,27 @@
 from google import genai
 from google.genai import types
 from config import GEMINI_API_KEY, GEMINI_MODEL
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+
+@retry(wait=wait_exponential(multiplier=1, min=4, max=15), stop=stop_after_attempt(4))
+def _call_gemini_api(prompt: str):
+    return client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.3,
+            max_output_tokens=1500,
+        ),
+    )
 
 def _make_completion(prompt: str) -> str:
     """Call Gemini and return generated text."""
     if client is None:
         return "AI summarization unavailable (no Gemini API key)."
     try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.3,
-                max_output_tokens=1500,
-            ),
-        )
+        response = _call_gemini_api(prompt)
         return response.text.strip() if response.text else ""
     except Exception as e:
         return f"AI summarization error: {str(e)}"
